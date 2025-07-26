@@ -167,7 +167,8 @@ function App() {
         
     <div className="container">
       <h1 className="title">SKYIOT SERVICE</h1>
-        <button onClick={() => signOut(auth)}>Logout</button>
+        <button className="logout-button" onClick={() => signOut(auth)}>Logout</button>
+
 
       {error ? (
         <div className="card"><h2>{error}</h2></div>

@@ -18,13 +18,16 @@ body {
 }
 
 .title {
-  font-size: 36px;
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 2rem;
   font-weight: bold;
-  color: #1976d2;
-  margin-bottom: 20px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  color: #01b1ec;
+  z-index: 999;
 }
+
 
 
 .card {
@@ -326,4 +329,23 @@ input:checked + .slider::before {
 
 .auth-container .error {
   color: red;
+}
+.logout-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: #ff4d4d;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  z-index: 1000;
+}
+
+.logout-button:hover {
+  background-color: #cc0000;
 }
