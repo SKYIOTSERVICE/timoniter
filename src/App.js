@@ -166,7 +166,7 @@ function App() {
   return (
         
     <div className="container">
-      <h1 className="title">SKYIOT SERVICE</h1>
+      
         <button className="logout-button" onClick={() => signOut(auth)}>Logout</button>
 
 
