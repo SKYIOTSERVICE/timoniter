@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import './App.css';
 
+// Utility: Format full date and time
 function formatFullDateTime(timeInput) {
-  if (!timeInput) return null;
-  if (typeof timeInput === 'string' && timeInput.startsWith('0000')) return null;
+  if (!timeInput) return 'N/A';
+  const date = typeof timeInput === 'string' ? new Date(timeInput) : timeInput;
+  if (!(date instanceof Date) || isNaN(date)) return 'N/A';
+  if (typeof timeInput === 'string' && timeInput.startsWith('0000')) return 'N/A';
 
-  const d = new Date(timeInput);
-  if (isNaN(d)) return null;
-
-  return d.toLocaleString(undefined, {
+  return date.toLocaleString(undefined, {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -20,19 +20,24 @@ function formatFullDateTime(timeInput) {
   });
 }
 
-function formatDuration(startTime, currentTime) {
-  if (!startTime) return null;
-  const diff = Math.floor((currentTime - new Date(startTime)) / 1000);
-  const hrs = Math.floor(diff / 3600);
-  const mins = Math.floor((diff % 3600) / 60);
-  const secs = diff % 60;
-  return `${hrs}h ${mins}m ${secs}s`;
+// Utility: Get duration string from a start time
+function getDurationString(startTime) {
+  if (!startTime) return 'N/A';
+  const now = new Date();
+  const diffMs = now - startTime;
+
+  const seconds = Math.floor(diffMs / 1000) % 60;
+  const minutes = Math.floor(diffMs / (1000 * 60)) % 60;
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+
+  return `${hours}h ${minutes}m ${seconds}s`;
 }
 
+// Device display
 function DeviceList({ devices, statusTimestamps }) {
   const names = [
     "Canteen", "Office", "Feed Mill", "Bathroom", "Boiler",
-    "Hatchery 1", "Hatchery 2", "Bungalow"
+    "Hatchery 1", "Hatchery 2", "Bungalow"
   ];
 
   return (
@@ -51,8 +56,12 @@ function DeviceList({ devices, statusTimestamps }) {
               {names[i] || `Device ${i + 1}`}: {status === 0 ? 'FULL' : status === 1 ? 'EMPTY' : 'ERROR'}
             </div>
             <div className="timestamp-row">
-              {t.empty && <div className="timestamp-item">Empty Tank: {formatFullDateTime(t.emptyRaw)}</div>}
-              {t.full && <div className="timestamp-item">Full Tank: {formatFullDateTime(t.fullRaw)}</div>}
+              {t.emptyRaw && !t.emptyRaw.startsWith('0000') && (
+                <div className="timestamp-item">Empty Tank: {formatFullDateTime(t.emptyRaw)}</div>
+              )}
+              {t.fullRaw && !t.fullRaw.startsWith('0000') && (
+                <div className="timestamp-item">Full Tank: {formatFullDateTime(t.fullRaw)}</div>
+              )}
             </div>
           </div>
         );
@@ -75,7 +84,18 @@ function App() {
   const [motorOnTime, setMotorOnTime] = useState(null);
   const [motorOffTime, setMotorOffTime] = useState(null);
 
-  const [autoRefresh, setAutoRefresh] = useState(false); 
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  function loadTimeFromStorage(key) {
+    const stored = localStorage.getItem(key);
+    const d = new Date(stored);
+    return isNaN(d) ? null : d;
+  }
+
+  function saveTimeToStorage(key, date) {
+    if (!(date instanceof Date)) return;
+    localStorage.setItem(key, date.toISOString());
+  }
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -87,13 +107,13 @@ function App() {
         return res.json();
       })
       .then(json => {
-        const raw = json?.sdevice ?? [];
-        const statuses = raw.map(o => {
-          const [k] = Object.keys(o).filter(k => k !== 'etime' && k !== 'ftime');
-          return parseInt(o[k], 10);
+        const rawDevices = json?.sdevice ?? [];
+        const statuses = rawDevices.map(o => {
+          const key = Object.keys(o).find(k => k !== 'etime' && k !== 'ftime');
+          return parseInt(o[key], 10);
         });
 
-        const ts = raw.map(o => ({
+        const ts = rawDevices.map(o => ({
           full: o.ftime && !o.ftime.startsWith('0000') ? o.ftime : null,
           empty: o.etime && !o.etime.startsWith('0000') ? o.etime : null,
           fullRaw: o.ftime,
@@ -102,30 +122,28 @@ function App() {
 
         setData({ ...json, sdevice: statuses });
         setStatusTimestamps(ts);
+        setPowerToggle(json?.power ?? '0');
+        setWifiToggle(json?.wificonnect ?? '0');
 
-        const powerVal = json?.power ?? '0';
-        const wifiVal = json?.wificonnect ?? '0';
-        setPowerToggle(powerVal);
-        setWifiToggle(wifiVal);
-
+        // Motor status handling
         const motorState = json?.motor_st;
         const savedMotorState = localStorage.getItem('lastMotorState');
+        const now = new Date();
 
-        if (savedMotorState !== motorState) {
-          const now = new Date();
+        if (motorState !== savedMotorState) {
           if (motorState === 'R') {
             setMotorOnTime(now);
-            localStorage.setItem('motorOnTime', now);
+            saveTimeToStorage('motorOnTime', now);
           } else {
             setMotorOffTime(now);
-            localStorage.setItem('motorOffTime', now);
+            saveTimeToStorage('motorOffTime', now);
           }
           localStorage.setItem('lastMotorState', motorState);
         } else {
-          const onTime = localStorage.getItem('motorOnTime');
-          const offTime = localStorage.getItem('motorOffTime');
-          if (onTime) setMotorOnTime(new Date(onTime));
-          if (offTime) setMotorOffTime(new Date(offTime));
+          const onTime = loadTimeFromStorage('motorOnTime');
+          const offTime = loadTimeFromStorage('motorOffTime');
+          if (onTime) setMotorOnTime(onTime);
+          if (offTime) setMotorOffTime(offTime);
         }
 
         setLoading(false);
@@ -144,40 +162,55 @@ function App() {
   useEffect(() => {
     let interval;
     if (autoRefresh) {
-      interval = setInterval(fetchData, 5000); 
+      interval = setInterval(fetchData, 5000);
     }
     return () => clearInterval(interval);
   }, [autoRefresh, fetchData]);
 
   useEffect(() => {
     const savedPowerState = localStorage.getItem('lastPowerState');
-    const savedPowerOnTime = localStorage.getItem('powerOnTime');
-    const savedPowerOffTime = localStorage.getItem('powerOffTime');
+    const savedPowerOnTime = loadTimeFromStorage('powerOnTime');
+    const savedPowerOffTime = loadTimeFromStorage('powerOffTime');
 
-    if (savedPowerOnTime) setPowerOnTime(new Date(savedPowerOnTime));
-    if (savedPowerOffTime) setPowerOffTime(new Date(savedPowerOffTime));
+    if (savedPowerOnTime) setPowerOnTime(savedPowerOnTime);
+    if (savedPowerOffTime) setPowerOffTime(savedPowerOffTime);
 
+    const now = new Date();
     if (savedPowerState !== null && savedPowerState !== powerToggle) {
-      const now = new Date();
       if (powerToggle === '1') {
         setPowerOnTime(now);
-        localStorage.setItem('powerOnTime', now);
+        saveTimeToStorage('powerOnTime', now);
       } else {
         setPowerOffTime(now);
-        localStorage.setItem('powerOffTime', now);
+        saveTimeToStorage('powerOffTime', now);
       }
       localStorage.setItem('lastPowerState', powerToggle);
     } else if (savedPowerState === null) {
-      const now = new Date();
       localStorage.setItem('lastPowerState', powerToggle);
       if (powerToggle === '1') {
         setPowerOnTime(now);
-        localStorage.setItem('powerOnTime', now);
+        saveTimeToStorage('powerOnTime', now);
       } else {
         setPowerOffTime(now);
-        localStorage.setItem('powerOffTime', now);
+        saveTimeToStorage('powerOffTime', now);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const savedPowerState = localStorage.getItem('lastPowerState');
+    if (savedPowerState === powerToggle) return;
+
+    const now = new Date();
+    if (powerToggle === '1') {
+      setPowerOnTime(now);
+      saveTimeToStorage('powerOnTime', now);
+    } else {
+      setPowerOffTime(now);
+      saveTimeToStorage('powerOffTime', now);
+    }
+    localStorage.setItem('lastPowerState', powerToggle);
   }, [powerToggle]);
 
   useEffect(() => {
@@ -190,6 +223,7 @@ function App() {
           body: JSON.stringify({ wificonnect: '0' }),
         }).catch(err => console.error('Wi-Fi reset failed:', err));
       }, 300000);
+
       return () => clearTimeout(timer);
     }
   }, [wifiToggle]);
@@ -201,13 +235,14 @@ function App() {
         const now = new Date();
         setPowerOffTime(now);
         localStorage.setItem('lastPowerState', '0');
-        localStorage.setItem('powerOffTime', now);
+        saveTimeToStorage('powerOffTime', now);
         fetch('https://tinodes1023.asia-southeast1.firebasedatabase.app/uid/motor.json', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ power: '0' }),
         }).catch(err => console.error('Power reset failed:', err));
       }, 300000);
+
       return () => clearTimeout(timer);
     }
   }, [powerToggle]);
@@ -224,7 +259,6 @@ function App() {
 
   return (
     <div className="container">
-      {}
       <div className="top-right-toggle">
         <label className="switch">
           <input
@@ -241,16 +275,7 @@ function App() {
 
       <div className="current-time">
         <strong>Current Date & Time: </strong>
-        {currentDateTime.toLocaleString(undefined, {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true,
-        })}
+        {formatFullDateTime(currentDateTime)}
       </div>
 
       <div className="status-indicators">
@@ -287,35 +312,40 @@ function App() {
         <div className="card">
           <h2>TI INDUSTRY</h2>
           <button className="refresh-button" onClick={fetchData}>Refresh</button>
+
           <div className="device-stats">
             <div className="stat-card stat-total">
-              <h4>Total Devices</h4><p>{total}</p>
+              <h4>Total Devices</h4>
+              <p>{total}</p>
             </div>
-            <div className="stat-row">
-              <div className="stat-card stat-running">
-                <h4>Running Devices</h4><p>{running}</p>
-              </div>
-              <div className="stat-card stat-error">
-                <h4>Error Devices</h4><p>{errors}</p>
-              </div>
-              <div className={`stat-card stat-motor ${motorOn === 'ON' ? 'motor-on' : 'motor-off'}`}>
-                <h4>Motor Status</h4>
-                <p>{motorOn}</p>
-                {motorOn === 'ON' && motorOnTime && (
-                  <>
-                    <div>Motor Turned On: {formatFullDateTime(motorOnTime)}</div>
-                    <div>Running for: {formatDuration(motorOnTime, currentDateTime)}</div>
-                  </>
-                )}
-                {motorOn !== 'ON' && motorOffTime && (
-                  <>
-                    <div>Motor Turned Off: {formatFullDateTime(motorOffTime)}</div>
-                    <div>Off since: {formatDuration(motorOffTime, currentDateTime)}</div>
-                  </>
-                )}
-              </div>
+            <div className="stat-card stat-running">
+              <h4>Devices Running</h4>
+              <p>{running}</p>
+            </div>
+            <div className="stat-card stat-error">
+              <h4>Error Devices</h4>
+              <p>{errors}</p>
+            </div>
+
+            <div className={`stat-card stat-motor ${motorOn === 'ON' ? 'motor-on' : 'motor-off'}`}>
+              <h4>Motor Status</h4>
+              <p>{motorOn}</p>
+
+              {motorOn === 'ON' && motorOnTime && (
+                <>
+                  <div>Motor Turned On at: {formatFullDateTime(motorOnTime)}</div>
+                  <div>Duration ON: {getDurationString(motorOnTime)}</div>
+                </>
+              )}
+              {motorOn === 'OFF' && motorOffTime && (
+                <>
+                  <div>Motor Turned Off at: {formatFullDateTime(motorOffTime)}</div>
+                  <div>Duration OFF: {getDurationString(motorOffTime)}</div>
+                </>
+              )}
             </div>
           </div>
+
           <DeviceList devices={data.sdevice} statusTimestamps={statusTimestamps} />
         </div>
       )}
