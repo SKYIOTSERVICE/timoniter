@@ -20,18 +20,7 @@ function formatFullDateTime(timeInput) {
   });
 }
 
-// Utility: Get duration string from a start time
-function getDurationString(startTime) {
-  if (!startTime) return 'N/A';
-  const now = new Date();
-  const diffMs = now - startTime;
 
-  const seconds = Math.floor(diffMs / 1000) % 60;
-  const minutes = Math.floor(diffMs / (1000 * 60)) % 60;
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-
-  return `${hours}h ${minutes}m ${seconds}s`;
-}
 
 // Device display
 function DeviceList({ devices, statusTimestamps }) {
@@ -79,8 +68,7 @@ function App() {
   const [wifiToggle, setWifiToggle] = useState('0');
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
-  const [powerOnTime, setPowerOnTime] = useState(null);
-  const [powerOffTime, setPowerOffTime] = useState(null);
+
   const [motorOnTime, setMotorOnTime] = useState(null);
   const [motorOffTime, setMotorOffTime] = useState(null);
 
@@ -169,29 +157,26 @@ function App() {
 
   useEffect(() => {
     const savedPowerState = localStorage.getItem('lastPowerState');
-    const savedPowerOnTime = loadTimeFromStorage('powerOnTime');
-    const savedPowerOffTime = loadTimeFromStorage('powerOffTime');
 
-    if (savedPowerOnTime) setPowerOnTime(savedPowerOnTime);
-    if (savedPowerOffTime) setPowerOffTime(savedPowerOffTime);
+
 
     const now = new Date();
     if (savedPowerState !== null && savedPowerState !== powerToggle) {
       if (powerToggle === '1') {
-        setPowerOnTime(now);
+        
         saveTimeToStorage('powerOnTime', now);
       } else {
-        setPowerOffTime(now);
+     
         saveTimeToStorage('powerOffTime', now);
       }
       localStorage.setItem('lastPowerState', powerToggle);
     } else if (savedPowerState === null) {
       localStorage.setItem('lastPowerState', powerToggle);
       if (powerToggle === '1') {
-        setPowerOnTime(now);
+
         saveTimeToStorage('powerOnTime', now);
       } else {
-        setPowerOffTime(now);
+      
         saveTimeToStorage('powerOffTime', now);
       }
     }
@@ -204,10 +189,10 @@ function App() {
 
     const now = new Date();
     if (powerToggle === '1') {
-      setPowerOnTime(now);
+     
       saveTimeToStorage('powerOnTime', now);
     } else {
-      setPowerOffTime(now);
+    
       saveTimeToStorage('powerOffTime', now);
     }
     localStorage.setItem('lastPowerState', powerToggle);
@@ -233,7 +218,7 @@ function App() {
       const timer = setTimeout(() => {
         setPowerToggle('0');
         const now = new Date();
-        setPowerOffTime(now);
+        
         localStorage.setItem('lastPowerState', '0');
         saveTimeToStorage('powerOffTime', now);
         fetch('https://tinodes1023.asia-southeast1.firebasedatabase.app/uid/motor.json', {
@@ -285,10 +270,7 @@ function App() {
             <span className="slider round"></span>
           </label>
           <span className={`label-text ${powerToggle === '1' ? 'online' : 'offline'}`}>⚡ Power</span>
-          <div className="timestamp-info">
-            {powerOnTime && <div>Power On: {formatFullDateTime(powerOnTime)}</div>}
-            {powerOffTime && <div>Power Off: {formatFullDateTime(powerOffTime)}</div>}
-          </div>
+
         </div>
 
         <div className="status-toggle">
@@ -334,13 +316,13 @@ function App() {
               {motorOn === 'ON' && motorOnTime && (
                 <>
                   <div>Motor Turned On at: {formatFullDateTime(motorOnTime)}</div>
-                  <div>Duration ON: {getDurationString(motorOnTime)}</div>
+                  
                 </>
               )}
               {motorOn === 'OFF' && motorOffTime && (
                 <>
                   <div>Motor Turned Off at: {formatFullDateTime(motorOffTime)}</div>
-                  <div>Duration OFF: {getDurationString(motorOffTime)}</div>
+                 
                 </>
               )}
             </div>
