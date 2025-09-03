@@ -315,7 +315,7 @@ function App() {
 
               {motorOn === 'ON' && motorOnTime && (
                 <>
-                  <div>Motor Turned On at: {formatFullDateTime(motorOnTime)}</div>
+                 
                   
                 </>
               )}
